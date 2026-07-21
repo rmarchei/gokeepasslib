@@ -1,5 +1,9 @@
 ### TO BE RELEASED
 
+* Add support for stream-protected binaries in the KDBX v3.1 metadata section (`<Binary Protected="True">`), matching the KeePass 2 reference implementation; previously the inner stream cipher was not advanced for them, corrupting every subsequent protected value on decode
+* Return the actual decoded length from `Binary.GetContentBytes` for uncompressed base64 content instead of a zero-padded buffer
+* Propagate group child unmarshalling errors instead of silently dropping the child element, which desynced the protection stream and corrupted all subsequent protected values
+
 ### v3.6.2
 
 * Adapt `composeContentBlocks31` method to fix file size inflation on encoding for KDBX v3.1 files
