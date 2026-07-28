@@ -1,5 +1,7 @@
 ### TO BE RELEASED
 
+### v3.7.0
+
 * Add support for stream protected binaries in the KDBX v3.1 metadata section
   (`<Binary Protected="True">`), as written by KeePass
     - Adds `Protected` to `Binary`
