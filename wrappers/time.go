@@ -84,7 +84,13 @@ func (tw TimeWrapper) MarshalText() ([]byte, error) {
 // UnmarshalText take a string of format time.RFC3339 and marshals
 // it into the TimeWrapper value (Kdbx v3.1)
 // On Kdbx v4 it calculates the time with given seconds via data byte array (base64 encoded)
+// Empty values represent unset timestamps in some writers, including KeeWeb/kdbxweb.
 func (tw *TimeWrapper) UnmarshalText(data []byte) error {
+	if len(bytes.TrimSpace(data)) == 0 {
+		*tw = TimeWrapper{Formatted: true, Time: time.Time{}}
+		return nil
+	}
+
 	var formatted bool
 	// Check for RFC string (KDBX 3.1), if it fail try with KDBX 4
 	t, err := time.Parse(time.RFC3339, string(data))
@@ -94,11 +100,14 @@ func (tw *TimeWrapper) UnmarshalText(data []byte) error {
 		var buf int64
 
 		decoded := make([]byte, base64.StdEncoding.DecodedLen(len(data)))
-		_, err = base64.StdEncoding.Decode(decoded, data)
+		n, err := base64.StdEncoding.Decode(decoded, data)
 		if err != nil {
 			return err
 		}
-		err = binary.Read(bytes.NewReader(decoded), binary.LittleEndian, &buf)
+		if n < 8 {
+			return fmt.Errorf("%w: %d bytes", ErrTimestampTooShort, n)
+		}
+		err = binary.Read(bytes.NewReader(decoded[:n]), binary.LittleEndian, &buf)
 		if err != nil {
 			return err
 		}
@@ -126,3 +135,6 @@ func (tw TimeWrapper) String() string {
 
 // ErrYearOutsideOfRange is the error returned when the year is outside 0 and 9999
 var ErrYearOutsideOfRange = errors.New("Wrappers.Time.MarshalText: year outside of range [0,9999]")
+
+// ErrTimestampTooShort is returned when a binary timestamp decodes to fewer than 8 bytes
+var ErrTimestampTooShort = errors.New("Wrappers.Time.UnmarshalText: timestamp too short")

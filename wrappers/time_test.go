@@ -1,6 +1,7 @@
 package wrappers
 
 import (
+	"encoding/base64"
 	"errors"
 	"testing"
 	"time"
@@ -161,6 +162,21 @@ func TestTimeWrapperMarshalText(t *testing.T) {
 	}
 }
 
+func TestTimeWrapperUnmarshalTextEmpty(t *testing.T) {
+	for _, value := range []string{"", "  ", "\t\r\n"} {
+		t.Run(value, func(t *testing.T) {
+			// Reset an existing value as well as accepting a new empty timestamp.
+			timeWrap := Now(WithKDBX4Formatting)
+			if err := timeWrap.UnmarshalText([]byte(value)); err != nil {
+				t.Fatalf("Expected no error for an empty timestamp, received %v", err)
+			}
+			if !timeWrap.Time.IsZero() || !timeWrap.Formatted {
+				t.Errorf("Expected formatted zero time, received %+v", timeWrap)
+			}
+		})
+	}
+}
+
 func TestTimeWrapperUnmarshalText(t *testing.T) {
 	cases := []struct {
 		title    string
@@ -207,6 +223,18 @@ func TestTimeWrapperUnmarshalText(t *testing.T) {
 
 			if !timeWrap.Time.Equal(c.expValue) {
 				t.Errorf("Did not receive expected value '%+v', received: '%+v'", c.expValue, *timeWrap)
+			}
+		})
+	}
+}
+
+func TestTimeWrapperUnmarshalTextShortBinary(t *testing.T) {
+	for n := 1; n < 8; n++ {
+		value := base64.StdEncoding.EncodeToString(make([]byte, n))
+		t.Run(value, func(t *testing.T) {
+			var timeWrap TimeWrapper
+			if err := timeWrap.UnmarshalText([]byte(value)); !errors.Is(err, ErrTimestampTooShort) {
+				t.Fatalf("Expected ErrTimestampTooShort, received %v", err)
 			}
 		})
 	}

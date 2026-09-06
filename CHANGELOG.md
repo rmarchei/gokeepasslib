@@ -1,5 +1,11 @@
 ### TO BE RELEASED
 
+* Accept empty timestamps written by KeeWeb/kdbxweb as unset (zero) times,
+  including metadata, entries and history, instead of failing to decode
+* Return `ErrTimestampTooShort` for truncated binary timestamps
+* Unlock protected values before removing unused binaries during encoding,
+  so deleting a protected attachment cannot desynchronize password encryption
+
 ### v3.7.0
 
 * Add support for stream protected binaries in the KDBX v3.1 metadata section
