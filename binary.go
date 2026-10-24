@@ -1,12 +1,17 @@
 package gokeepasslib
 
 import (
+	"bufio"
 	"bytes"
+	"compress/flate"
 	"compress/gzip"
 	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"io"
+	"slices"
 
 	w "github.com/tobischo/gokeepasslib/v3/wrappers"
 )
@@ -166,16 +171,18 @@ func (wc writeCloser) Close() error {
 func (b *Binary) SetContent(c []byte) error {
 	buff := &bytes.Buffer{}
 
-	var writer io.WriteCloser
+	var encoder io.WriteCloser
 
 	if b.isKDBX4 {
-		writer = writeCloser{Writer: buff}
+		encoder = writeCloser{Writer: buff}
 	} else {
-		writer = base64.NewEncoder(base64.StdEncoding, buff)
+		encoder = base64.NewEncoder(base64.StdEncoding, buff)
 	}
 
-	if b.Compressed.Bool && !b.isStreamProtected() {
-		writer = gzip.NewWriter(writer)
+	writer := encoder
+	compress := b.Compressed.Bool && !b.isStreamProtected()
+	if compress {
+		writer = gzip.NewWriter(encoder)
 	}
 	_, err := writer.Write(c)
 	if err != nil {
@@ -184,9 +191,62 @@ func (b *Binary) SetContent(c []byte) error {
 	if err := writer.Close(); err != nil {
 		return err
 	}
+	// Closing the gzip writer does not close the encoder below it, which still
+	// holds the last partial base64 block, i.e. the end of the gzip trailer
+	if compress {
+		if err := encoder.Close(); err != nil {
+			return err
+		}
+	}
 	b.Content = buff.Bytes()
 
 	return nil
+}
+
+// completeGzipTrailer completes the gzip stream of a compressed binary of the
+// XML document whose trailer is missing (part of) the size at its end.
+//
+// SetContent did not close the base64 encoder of a compressed binary before,
+// which dropped the last one or two bytes of the trailer. GetContentBytes
+// reads such a binary anyway, while KeeWeb rejects the whole database.
+// The trailer is only completed if the deflate data is complete and matches
+// the CRC-32 of the trailer, any other damage is left as it is.
+func (b *Binary) completeGzipTrailer() {
+	// The unclosed encoder dropped its last partial block instead of padding
+	// it, so content with padding was not truncated this way and is not
+	// decoded at all. The padding may be followed by line breaks, and the
+	// decoder below accepts it at the end of each block it decodes, so the
+	// whole content is searched for it
+	if b.isKDBX4 || !b.Compressed.Bool || b.isStreamProtected() ||
+		bytes.Contains(b.Content, []byte("=")) {
+		return
+	}
+
+	// Reading the header with the gzip reader and the deflate data on its own
+	// shows where the trailer starts, since neither reader takes more than it
+	// needs from an io.ByteReader. The content is decoded while it is read
+	reader := bufio.NewReader(base64.NewDecoder(base64.StdEncoding, bytes.NewReader(b.Content)))
+	if _, err := gzip.NewReader(reader); err != nil {
+		return
+	}
+	digest := crc32.NewIEEE()
+	size, err := io.Copy(digest, flate.NewReader(reader))
+	if err != nil {
+		return
+	}
+
+	// The size is stored modulo 2^32
+	trailer := binary.LittleEndian.AppendUint32(nil, digest.Sum32())
+	trailer = binary.LittleEndian.AppendUint32(trailer, uint32(size))
+	present, err := io.ReadAll(io.LimitReader(reader, int64(len(trailer))))
+	if err != nil || len(present) < crc32.Size || len(present) == len(trailer) ||
+		!bytes.HasPrefix(trailer, present) {
+		return
+	}
+
+	// Content without padding encodes a multiple of 3 bytes, so the missing
+	// bytes are encoded on their own
+	b.Content = base64.StdEncoding.AppendEncode(slices.Clip(b.Content), trailer[len(present):])
 }
 
 // CreateReference creates a reference with the same id as b with filename f

@@ -319,6 +319,18 @@ func (db *Database) cleanupBinaries() {
 	*db.getBinaries() = updated
 }
 
+// repairBinaries completes the truncated gzip trailers of the binaries of the
+// XML document, see Binary.completeGzipTrailer
+func (db *Database) repairBinaries() {
+	if db.Content.Meta == nil {
+		return
+	}
+
+	for i := range db.Content.Meta.Binaries {
+		db.Content.Meta.Binaries[i].completeGzipTrailer()
+	}
+}
+
 func addEntriesBinaries(result binariesUsages, entries []Entry) {
 	for _, entry := range entries {
 		for i, binary := range entry.Binaries {

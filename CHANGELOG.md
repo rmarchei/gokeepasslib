@@ -5,6 +5,14 @@
 * Return `ErrTimestampTooShort` for truncated binary timestamps
 * Unlock protected values before removing unused binaries during encoding,
   so deleting a protected attachment cannot desynchronize password encryption
+* Close the base64 encoder of compressed binaries in `Binary.SetContent`, which
+  dropped the last one or two bytes of the gzip trailer of KDBX v3.1
+  attachments. KeeWeb/kdbxweb rejected such databases as a whole
+    - Encoding completes a truncated trailer if only (part of) the size is
+      missing and the CRC-32 matches the complete deflate data, so saving a
+      database which was written before repairs it. Content which contains
+      base64 padding is not checked, since the old writer never padded the
+      content it truncated
 
 ### v3.7.1
 

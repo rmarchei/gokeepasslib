@@ -32,6 +32,10 @@ func (e *Encoder) Encode(db *Database) error {
 	// Unused protected binaries still consume the original inner stream.
 	// Remove them only after unlocking, then re-lock against the cleaned pool.
 	db.cleanupBinaries()
+	// Complete truncated gzip trailers of the remaining binaries. Stream
+	// protected binaries are skipped, whatever their Compressed flag says, so
+	// the inner stream stays aligned
+	db.repairBinaries()
 
 	// Re-Lock the protected values mapping to ensure that they are locked in memory and
 	// follow the order in which they would be written again
