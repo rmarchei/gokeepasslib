@@ -13,6 +13,18 @@
       database which was written before repairs it. Content which contains
       base64 padding is not checked, since the old writer never padded the
       content it truncated
+* Return the raw content of the KDBX v4 inner header binaries from
+  `Binary.GetContentBytes`, which decoded content that happened to be valid
+  base64 (skipping line breaks), e.g. of a text attachment
+    - Note that a binary which is put into the inner header without the
+      `WithKDBXv4Binary` option used by `Database.AddBinary`, e.g. with the
+      deprecated `Binaries.Add` without options, still gets base64 content,
+      which is written to the file as it is. Once the database is decoded
+      again, that content is returned as base64 text, as KeePass and KeeWeb
+      read it. Before, it was decoded as base64, which restored the content
+      only if `Compressed` was false. Compressed content, the default of
+      `Binaries.Add`, came back as the raw gzip stream, as the inner header
+      does not store the flag
 
 ### v3.7.1
 

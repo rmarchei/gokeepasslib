@@ -110,14 +110,20 @@ func (bs *Binaries) Add(c []byte, options ...BinaryOption) *Binary {
 
 // GetContentBytes returns a bytes slice containing content of a binary
 func (b Binary) GetContentBytes() ([]byte, error) {
-	// Check for base64 content (KDBX 3.1), if it fail try with KDBX 4
-	decoded := make([]byte, base64.StdEncoding.DecodedLen(len(b.Content)))
-	n, err := base64.StdEncoding.Decode(decoded, b.Content)
-	if err != nil {
-		// KDBX 4 doesn't encode it
-		decoded = b.Content[:]
+	decoded := b.Content
+
+	// KDBX 4 stores the binaries of the inner header as raw bytes, which may
+	// happen to be valid base64 as well. They are copied like decoded content,
+	// so that empty content is no nil slice and changing the result leaves b
+	// as it is. Other binaries are base64 encoded in the XML document, content
+	// which is no valid base64 is used as it is
+	if b.isKDBX4 {
+		decoded = append([]byte{}, b.Content...)
 	} else {
-		decoded = decoded[:n]
+		buf := make([]byte, base64.StdEncoding.DecodedLen(len(b.Content)))
+		if n, err := base64.StdEncoding.Decode(buf, b.Content); err == nil {
+			decoded = buf[:n]
+		}
 	}
 
 	// KeePass never compresses the content of a stream protected binary and
